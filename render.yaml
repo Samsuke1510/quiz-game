@@ -15,7 +15,7 @@
 services:
   # --- The backend (the game server / referee) ---------------------------
   - type: web
-    name: samsuke-quiz-backend
+    name: samsuquizz-backend
     runtime: node
     rootDir: server
     plan: free
@@ -31,7 +31,7 @@ services:
 
   # --- The web app (the built front end people actually play) ------------
   - type: web
-    name: samsuke-quiz-web
+    name: samsuquizz-web
     runtime: static
     rootDir: app
     buildCommand: npm ci && npx expo export --platform web
@@ -41,9 +41,9 @@ services:
       # the backend. If the backend URL gets a random suffix (name taken),
       # fix THIS line and redeploy.
       - key: EXPO_PUBLIC_API_URL
-        value: https://samsuke-quiz-backend.onrender.com
+        value: https://samsuquizz-backend.onrender.com
 
 databases:
   # --- The database (Random-Game scores) ---------------------------------
-  - name: samsuke-quiz-postgres
+  - name: samsuquizz-postgres
     plan: free
