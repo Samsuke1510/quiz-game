@@ -1,0 +1,49 @@
+# render.yaml
+# ==========================================================================
+# ONE-CLICK DEPLOY CONFIG FOR RENDER
+# ==========================================================================
+#
+# This file tells Render to create three things for us:
+#   1. A PostgreSQL database          (where Random-Game scores are saved)
+#   2. The backend web service        (Node.js + Socket.io — the game server)
+#   3. A static web site              (the built Expo app people play in)
+#
+# To deploy: connect this GitHub repo to Render, then "New +" -> "Blueprint".
+# Render reads this file and offers to create all three at once.
+# ==========================================================================
+
+services:
+  # --- The backend (the game server / referee) ---------------------------
+  - type: web
+    name: samsuke-quiz-backend
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      # Point the server at the PostgreSQL database created below.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: samsuke-quiz-postgres
+          property: connectionString
+
+  # --- The web app (the built front end people actually play) ------------
+  - type: web
+    name: samsuke-quiz-web
+    runtime: static
+    rootDir: app
+    buildCommand: npm ci && npx expo export --platform web
+    publishPath: dist
+    envVars:
+      # Baked into the app at build time so every fetch/socket call goes to
+      # the backend. If the backend URL gets a random suffix (name taken),
+      # fix THIS line and redeploy.
+      - key: EXPO_PUBLIC_API_URL
+        value: https://samsuke-quiz-backend.onrender.com
+
+databases:
+  # --- The database (Random-Game scores) ---------------------------------
+  - name: samsuke-quiz-postgres
+    plan: free
