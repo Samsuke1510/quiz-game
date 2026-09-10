@@ -31,6 +31,22 @@ export const CATEGORIES = {
   ANIME: 31,
 };
 
+// Open Trivia DB is free but throttles aggressive requesters (it allows about
+// one request per 5 seconds per IP, then answers "too many requests" for a
+// while). Hosted servers (like Render) share a handful of IPs with lots of
+// apps, so we have to be gentle:
+//   1. CACHE short term — a few games in a row will reuse the last fetched
+//      questions instead of hammering Open Trivia DB on every single round.
+//   2. RETRY with a wait — when it does answer with "too many requests",
+//      pause and try again instead of giving up instantly.
+const CACHE_TTL_MS = 120_000;  // reuse questions for 2 minutes
+const RETRY_COUNT = 4;         // how many times to re-ask after "too many requests"
+const RETRY_DELAY_MS = 5_000;  // the pause between retries
+const BETWEEN_REQUESTS_MS = 5_000; // pause between our own sequential fetches
+
+// Simple in-memory cache: cacheKey -> { at, questions }.
+const cache = new Map();
+
 /**
  * Fetch quiz questions and clean them up.
  *
@@ -54,12 +70,29 @@ export async function getQuestions({ amount = 10, category, language } = {}) {
             { category: CATEGORIES.GENERAL, amount: amount - half },
           ];
 
-  // Promise.all runs all the requests at the same time so we aren't waiting
-  // on them one after another.
-  const rawResults = await Promise.all(requests.map(fetchFromOpenTDB));
+  // A round of the same size + category reuses the last questions for a
+  // couple of minutes (CACHE_TTL_MS) instead of asking Open Trivia DB fresh.
+  const cacheKey = `${category || "mix"}:${amount}`;
+  const now = Date.now();
+  const hit = cache.get(cacheKey);
 
-  // Flatten the two arrays into one, clean each question, and shuffle.
-  const questions = shuffle(rawResults.flat().map(cleanQuestion));
+  let questions;
+  if (hit && now - hit.at < CACHE_TTL_MS) {
+    questions = hit.questions;
+  } else {
+    // Ask Open Trivia DB. We do it ONE request at a time with a pause between
+    // instead of firing them together — two simultaneous calls can trip the
+    // "one request per 5 seconds" rule all on our own.
+    const rawResults = [];
+    for (const req of requests) {
+      rawResults.push(await fetchFromOpenTDB(req));
+      await new Promise((r) => setTimeout(r, BETWEEN_REQUESTS_MS));
+    }
+
+    // Flatten the two arrays into one, clean each question, and shuffle.
+    questions = shuffle(rawResults.flat().map(cleanQuestion));
+    cache.set(cacheKey, { at: now, questions });
+  }
 
   // FRENCH: translate every question (text + answers) before returning.
   // Each question becomes its own translated copy; if translation is slow,
@@ -80,9 +113,11 @@ export async function getQuestions({ amount = 10, category, language } = {}) {
 
 /**
  * Ask Open Trivia DB for questions and check the request went well.
+ * @param {object} req           the { category, amount } to ask for
+ * @param {number} [retries]     how many retries we have left (internal use)
  * @returns {Promise<Array>} the raw "results" array from their API
  */
-async function fetchFromOpenTDB({ category, amount }) {
+async function fetchFromOpenTDB({ category, amount }, retries = RETRY_COUNT) {
   const url = `https://opentdb.com/api.php?amount=${amount}&category=${category}`;
 
   // "fetch" is built into modern Node — it does a web request and gives us a response.
@@ -96,6 +131,12 @@ async function fetchFromOpenTDB({ category, amount }) {
   // Open Trivia DB replies with response_code 0 when all went well,
   // or another code when it couldn't (e.g. not enough questions).
   if (data.response_code !== 0) {
+    // response_code 5 = "too many requests". If it's just a throttle, wait a
+    // moment and ask again instead of failing the whole game.
+    if (data.response_code === 5 && retries > 0) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      return fetchFromOpenTDB({ category, amount }, retries - 1);
+    }
     throw new Error(`Open Trivia DB returned response_code ${data.response_code}`);
   }
 
