@@ -35,7 +35,7 @@ services:
     runtime: static
     rootDir: app
     buildCommand: npm ci && npx expo export --platform web
-    publishPath: dist
+    staticPublishPath: dist
     envVars:
       # Baked into the app at build time so every fetch/socket call goes to
       # the backend. If the backend URL gets a random suffix (name taken),
