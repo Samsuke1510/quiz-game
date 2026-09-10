@@ -2,7 +2,7 @@
 
 A quiz game you can play **in the browser and on your phone**. It pulls fresh questions from the free **Open Trivia DB** API (General Knowledge and Anime & Manga), serves them through your own backend, and lets you **play live against friends** in multiplayer rooms.
 
-> **Current status:** Phases 1, 2 & 3 (scores) done — single-player, **coded multiplayer**, and a **Random Game** mode all work, plus an **English/French language switcher** and a **persistent leaderboard** for Random-Game scores. Railway deploy is next.
+> **Current status:** Phases 1, 2 & 3 (scores) done — single-player, **coded multiplayer**, and a **Random Game** mode all work, plus an **English/French language switcher** and a **persistent leaderboard** for Random-Game scores. The whole stack is deployed live on Render.
 
 ---
 
@@ -15,7 +15,7 @@ A quiz game you can play **in the browser and on your phone**. It pulls fresh qu
 | Questions | **Open Trivia DB API** | Free, no account needed. Returns questions with the correct answer *and* the 3 wrong answers. |
 | Real-time multiplayer | **Socket.io** | Live rooms + racing questions; the server acts as the referee. |
 | Database (Phase 3) | **PostgreSQL** | For saved scores and history. |
-| Hosting (Phase 3) | **Railway** | Easy cloud deploy for the Node server and the database. |
+| Hosting (Phase 3) | **Render** | Easy cloud deploy for the Node server, the database, and the web site. |
 | Languages | **EN / FR settings** | English via Open Trivia DB; French via live server-side translation |
 
 **One language everywhere: JavaScript.** That keeps things simple to learn and to read.
@@ -30,7 +30,7 @@ QuizzGame/
 │   ├── index.js       ← creates the Express server + Socket.io, mounts routes
 │   └── src/
 │       ├── game.js            ← the MULTIPLAYER referee: rooms, questions, timer, grading
-│       ├── db.js              ← score storage: PostgreSQL (Railway) or in-memory (local dev)
+│       ├── db.js              ← score storage: PostgreSQL (Render) or in-memory (local dev)
 │       ├── opentdb.js         ← where questions come from: Open Trivia DB (EN) + translation (FR)
 │       └── translate.js       ← LIVE translation (MyMemory API): turns English questions into French
 │
@@ -210,7 +210,7 @@ Each question looks like this:
 
 | What | Where | Notes |
 |---|---|---|
-| Backend address | `app/src/services/api.js` → `BASE_URL` | `localhost` for the web version; your computer's LAN IP for a real phone; your Railway URL after deploy |
+| Backend address | `app/src/services/api.js` → `BASE_URL` | `localhost` for the web version; your computer's LAN IP for a real phone; the deployed backend URL (set via `EXPO_PUBLIC_API_URL` at build time) |
 | Questions per round | solo: picker before the game; multiplayer: the **host picks in the lobby** | pick 10, 20, 30, 40, or 50 (default 10) |
 | Categories | `server/src/opentdb.js` → `CATEGORIES` | `9` = General Knowledge, `31` = Japanese Anime & Manga |
 
@@ -263,65 +263,49 @@ are **not** stored — only Random games.
   first.
 
 **Local dev:** scores live in memory (lost when the server restarts) — no
-setup needed. **On Railway:** scores are stored in PostgreSQL and persist
-forever (see "Deploying to Railway" below).
+setup needed. **On Render:** scores are stored in PostgreSQL and persist
+forever.
 
 ---
 
-## Deploying to Railway
+## Deploying to Render
 
-Railway hosts the backend (Node server + PostgreSQL) and the web app (static
-site) as two separate services. Here's how to set it up:
+Render hosts three things for us: the backend (Node server), a PostgreSQL
+database, and a static web site. Everything is defined in **`render.yaml`**
+at the repo root, so the whole stack can be created in one click.
 
-### 1. Install the Railway CLI and log in
+### Live URLs
 
-```bash
-npm install -g @railway/cli
-railway login            # opens a browser to authenticate
-```
+- **Web app (play):** https://samsuquizz-web.onrender.com
+- **Backend:** https://samsuquizz-backend.onrender.com
 
-### 2. Create a Railway project
+> Render's **free** plan serves web requests quickly but spins a web service
+> down after ~15 minutes of inactivity. The first request after that takes a
+> few seconds to wake it back up — a normal free-tier cold start.
 
-```bash
-railway init             # creates a new project; give it a name like "quiz-game"
-```
+### How it's set up
 
-### 3. Add a PostgreSQL database
+1. **Push the repo to GitHub.**
+2. On render.com, click **New + → Blueprint**, pick the repo, and **Apply**.
+   Render reads `render.yaml` and creates three resources:
+   - **samsuquizz-backend** — Node web service (`server/`), `npm install` +
+     `npm start`. Its `DATABASE_URL` is filled in automatically from the
+     database.
+   - **samsuquizz-web** — static site built from `app/` via
+     `npm ci && npx expo export --platform web`, publishing the `app/dist`
+     folder. `EXPO_PUBLIC_API_URL` is baked in so the app knows the backend's
+     URL.
+   - **samsuquizz-postgres** — the free PostgreSQL database that stores
+     Random-Game scores.
+3. Every push to `master` redeploys the affected service automatically.
 
-In the Railway dashboard (or via CLI), add a **PostgreSQL** service. Railway
-sets a `DATABASE_URL` environment variable on the service automatically.
+### What to change if you rename anything
 
-### 4. Deploy the backend
-
-```bash
-cd server
-railway link             # attach this folder to a Railway service
-railway variables set DATABASE_URL="$(railway variables get DATABASE_URL --service postgres)"
-railway up               # deploys; Railway detects Node.js and runs "npm start"
-```
-
-Railway gives you a public URL like `https://quiz-backend.up.railway.app`.
-Set the `PORT` variable if needed (Railway usually sets it automatically).
-
-### 5. Deploy the web app
-
-The web app is a **static site** (just HTML + JS files). Build it locally
-first:
-
-```bash
-cd app
-EXPO_PUBLIC_API_URL=https://quiz-backend.up.railway.app npx expo export --platform web
-```
-
-Then add a new **static site** service in Railway pointing at the `app/dist`
-folder. Alternatively, push the `dist/` contents to a service that serves
-static files (e.g. Nginx, or a Railway static site service).
-
-### 6. Visit your app
-
-Open the web service's public URL in your browser — the app calls the
-backend at the URL baked in at build time (`EXPO_PUBLIC_API_URL`). On a
-phone, open the same URL over Wi-Fi or mobile data.
+- Service names → their `.onrender.com` URLs change.
+- If you rename the backend, update the `EXPO_PUBLIC_API_URL` value under
+  the `samsuquizz-web` service in `render.yaml` so the built app talks to it.
+- `DATABASE_URL` is wired via the `fromDatabase` reference in `render.yaml`;
+  the `name` there must match the database's `name` exactly.
 
 ---
 
@@ -330,8 +314,8 @@ phone, open the same URL over Wi-Fi or mobile data.
 - **Phase 1 (✅ done)** — Single-player quiz: backend → Open Trivia DB → app.
 - **Phase 2 (✅ done)** — Real-time multiplayer with Socket.io: create/join rooms with a code, everyone on the same question racing to answer, live scoreboard, server-side grading so no one can cheat.
 - **Language switcher (✅ done)** — Settings ⚙ to pick English or Français; the whole app and the questions switch, and your choice is remembered.
-- **Phase 3 — scores (✅ done)** — Random-Game scores saved to the database, persistent leaderboard viewable from the home screen. Only Random-Game matches are saved; in-memory locally, PostgreSQL on Railway.
-- **Phase 3 — deploy (next)** — Deploy everything to Railway (backend + PostgreSQL + static web site).
+- **Phase 3 — scores (✅ done)** — Random-Game scores saved to the database, persistent leaderboard viewable from the home screen. Only Random-Game matches are saved; in-memory locally, PostgreSQL on Render.
+- **Phase 3 — deploy (✅ done)** — Entire stack deployed to Render via `render.yaml`: backend + PostgreSQL + static web site.
 
 ---
 

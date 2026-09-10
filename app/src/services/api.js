@@ -18,8 +18,8 @@
 //   Local dev (default):  localhost = this same computer, for the web version.
 //   Real phone on your Wi-Fi:  set EXPO_PUBLIC_API_URL (or edit below) to your
 //     computer's LAN IP, e.g. http://192.168.1.5:3000
-//   After we deploy to RAILWAY:  set EXPO_PUBLIC_API_URL to the backend's URL,
-//     e.g. https://quiz-backend.up.railway.app
+//   Deployed on RENDER:  the web app is built with EXPO_PUBLIC_API_URL set to
+//     the backend's URL, e.g. https://samsuquizz-backend.onrender.com
 //
 // EXPO_PUBLIC_API_URL lets you point the app at a different server WITHOUT
 // editing code — pass it when you build/deploy (Expo bakes it in at build
