@@ -1,0 +1,19 @@
+{
+  "name": "quiz-server",
+  "version": "0.1.0",
+  "description": "Backend for the quiz game. Fetches questions from Open Trivia DB and serves them to the app.",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "he": "^1.2.0",
+    "pg": "^8.23.0",
+    "socket.io": "^4.8.3"
+  }
+}
